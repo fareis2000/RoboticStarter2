@@ -1,0 +1,90 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+#define SENSOR_PIN A0     // AO do sensor KY
+#define BUZZER_PIN 9      // Pino 9 (PWM de alta frequência via Timer1)
+#define LED_VERDE 2
+#define LED_AMARELO 4
+#define LED_VERMELHO 3
+
+const unsigned long sampleWindow = 60; // Janela de atualização da tela (ms)
+
+void setup() {
+  pinMode(SENSOR_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(LED_VERDE, OUTPUT);
+  pinMode(LED_AMARELO, OUTPUT);
+  pinMode(LED_VERMELHO, OUTPUT);
+
+  digitalWrite(LED_VERDE, LOW);
+  digitalWrite(LED_AMARELO, LOW);
+  digitalWrite(LED_VERMELHO, LOW);
+
+  Serial.begin(115200); // 115200 para não atrasar a reprodução do áudio
+
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+
+  // Configura o Timer 1 para PWM em alta frequência (~31.25 kHz no Pino 9)
+  // Isso gera a onda necessária para o buzzer passivo reproduzir a forma da voz
+  TCCR1A = _BV(COM1A1) | _BV(WGM10);
+  TCCR1B = _BV(CS10);
+
+  // Acelera a velocidade de conversão do ADC
+  ADCSRA = (ADCSRA & 0xF8) | 0x04; 
+}
+
+void loop() {
+  unsigned long startMillis = millis();
+  
+  unsigned int signalMax = 0;
+  unsigned int signalMin = 1024;
+  unsigned int sample = 0;
+
+  // Loop de amostragem: lê, calcula amplitude e REPRODUZ o áudio ao mesmo tempo
+  while (millis() - startMillis < sampleWindow) {
+    sample = analogRead(SENSOR_PIN);
+
+    // 1. REPRODUÇÃO DA VOZ NO BUZZER (Pass-through imediato)
+    // Converte a leitura de 10 bits (0-1023) para 8 bits (0-255) do PWM
+    OCR1A = sample >> 2;
+
+    // 2. Rastreamento de picos para o cálculo da intensidade
+    if (sample < 1024) {
+      if (sample > signalMax) signalMax = sample;
+      if (sample < signalMin) signalMin = sample;
+    }
+  }
+
+  // Amplitude total capturada na janela
+  unsigned int peakToPeak = signalMax - signalMin;
+
+  // Conversão sem limite superior rígido:
+  // 1023 unidades de ADC correspondem a uma escala aberta proporcional
+  int db = map(peakToPeak, 0, 1023, 30, 130);
+  if (db < 0) db = 0;
+
+  // Atualização dos LEDs como VU Meter (proporcional à amplitude)
+  digitalWrite(LED_VERDE, peakToPeak > 15 ? HIGH : LOW);
+  digitalWrite(LED_AMARELO, peakToPeak > 150 ? HIGH : LOW);
+  digitalWrite(LED_VERMELHO, peakToPeak > 350 ? HIGH : LOW);
+
+  // Atualização do LCD
+  lcd.setCursor(0, 0);
+  lcd.print("Decibeis: ");
+  lcd.print(db);
+  lcd.print(" dB   ");
+
+  lcd.setCursor(0, 1);
+  lcd.print("Amp: ");
+  lcd.print(peakToPeak);
+  lcd.print(" [AUDIO ON] ");
+
+  Serial.print("P-P: ");
+  Serial.print(peakToPeak);
+  Serial.print(" | dB aprox: ");
+  Serial.println(db);
+}
