@@ -1,45 +1,45 @@
 #include <DHT.h>
 
-// Define o tipo do sensor DHT e o pino em que está conectado
-#define DHTPIN A2 // Pino conectado ao DHT11
-#define motor 13
-#define DHTTYPE DHT11 // Define o tipo de sensor (DHT11)
+// Definições de pinos e tipo de sensor
+#define PINO_DHT 2       // Pino de dados do DHT11
+#define PINO_MOTOR 9     // Pino conectado à base do transistor
+#define TIPO_DHT DHT11   // Modelo do sensor
 
-// Cria o objeto DHT
-DHT dht(DHTPIN, DHTTYPE);
+// Limite de temperatura em graus Celsius
+const float TEMP_LIMITE = 26.0;
+
+DHT dht(PINO_DHT, TIPO_DHT);
 
 void setup() {
-  Serial.begin(9600); // Inicializa a comunicação serial
-  dht.begin();        // Inicializa o sensor DHT
-  pinMode(motor, OUTPUT);
-  Serial.println("Sensor DHT11 iniciado!");
+  Serial.begin(9600);
+  pinMode(PINO_MOTOR, OUTPUT);
+  digitalWrite(PINO_MOTOR, LOW); // Garante que o motor comece desligado
+  
+  dht.begin();
 }
 
 void loop() {
-  // Lê a umidade e a temperatura do sensor
-  float umidade = dht.readHumidity();
+  // O DHT11 precisa de cerca de 2 segundos entre leituras
+  delay(2000);
+
   float temperatura = dht.readTemperature();
 
-
-  if (temperatura >= 25){
-    digitalWrite(motor, HIGH);
-  } else {
-    digitalWrite(motor, LOW);
-  }
-  
-  // Verifica se a leitura foi bem-sucedida
-  if (isnan(umidade) || isnan(temperatura)) {
-    Serial.println("Falha na leitura do sensor DHT!");
+  // Verifica se houve falha na leitura do sensor
+  if (isnan(temperatura)) {
+    Serial.println("Falha ao ler o sensor DHT11!");
     return;
   }
 
-  // Exibe os valores lidos
-  Serial.print("Umidade: ");
-  Serial.print(umidade);
-  Serial.print("%");
-  Serial.print(" / Temperatura: ");
+  Serial.print("Temperatura atual: ");
   Serial.print(temperatura);
-  Serial.println("°C");
+  Serial.println(" °C");
 
-  delay(2000); // Aguarda 2 segundos antes da próxima leitura
+  // Aciona ou desliga o transistor conforme a temperatura
+  if (temperatura > TEMP_LIMITE) {
+    digitalWrite(PINO_MOTOR, HIGH);
+    Serial.println("Status: Motor LIGADO");
+  } else {
+    digitalWrite(PINO_MOTOR, LOW);
+    Serial.println("Status: Motor DESLIGADO");
+  }
 }
